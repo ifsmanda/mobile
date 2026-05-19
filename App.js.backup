@@ -1,0 +1,197 @@
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, SafeAreaView, ActivityIndicator } from 'react-native';
+import { supabase } from './lib/supabase';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
+
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Auth States
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Scanner States
+  const [hasPermission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('Mengambil lokasi...');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else setLoading(false);
+    });
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchProfile(session.user.id);
+      else setProfile(null);
+    });
+  }, []);
+
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase.from('sr_profiles').select('*').eq('id', userId).single();
+      if (error && error.code !== 'PGRST116') throw error;
+      setProfile(data || { role: 'SISWA', full_name: 'User (Belum ada profil)' });
+    } catch (error) {
+      console.warn(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signIn = async () => {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) Alert.alert('Error', error.message);
+    setLoading(false);
+  };
+
+  const handleBarCodeScanned = async ({ type, data }) => {
+    setScanned(true);
+    setLocationStatus('Mendapatkan GPS...');
+    
+    // Request GPS
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Izin ditolak', 'Akses lokasi diperlukan untuk presensi.');
+      return;
+    }
+
+    let location = await Location.getCurrentPositionAsync({});
+    setLocationStatus(`GPS Valid: Lat ${location.coords.latitude.toFixed(4)}, Lng ${location.coords.longitude.toFixed(4)}`);
+
+    // In a real app, send to supabase attendance_records here.
+    Alert.alert('Presensi Berhasil', `QR Token: ${data}\nLokasi: Akurat`);
+  };
+
+  if (loading) {
+    return <View style={styles.center}><ActivityIndicator size="large" color="#4f46e5" /></View>;
+  }
+
+  // --- LOGIN SCREEN ---
+  if (!session) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.authContainer}>
+          <View style={styles.logoBox}>
+            <Text style={styles.logoText}>SM</Text>
+          </View>
+          <Text style={styles.title}>Smart-Report Mobile</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#94a3b8"
+            onChangeText={(text) => setEmail(text)}
+            value={email}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#94a3b8"
+            onChangeText={(text) => setPassword(text)}
+            value={password}
+            secureTextEntry
+          />
+          <TouchableOpacity style={styles.btnPrimary} onPress={signIn}>
+            <Text style={styles.btnText}>Masuk</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- SISWA SCREEN (SCANNER) ---
+  if (profile?.role === 'SISWA') {
+    if (!hasPermission) return <View style={styles.center}><ActivityIndicator /></View>;
+    if (!hasPermission.granted) {
+      return (
+        <View style={styles.center}>
+          <Text style={{textAlign: 'center', marginBottom: 20}}>Aplikasi membutuhkan akses kamera</Text>
+          <TouchableOpacity style={styles.btnPrimary} onPress={requestPermission}>
+            <Text style={styles.btnText}>Beri Izin</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerText}>Halo, {profile?.full_name}</Text>
+          <TouchableOpacity onPress={() => supabase.auth.signOut()}>
+            <Text style={{color: '#ef4444'}}>Keluar</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.scannerContainer}>
+          <CameraView
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ["qr"],
+            }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <View style={styles.overlay}>
+             <View style={styles.scanBox} />
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.infoText}>{scanned ? locationStatus : 'Arahkan kamera ke QR Code Presensi'}</Text>
+          {scanned && (
+            <TouchableOpacity style={styles.btnPrimary} onPress={() => setScanned(false)}>
+              <Text style={styles.btnText}>Scan Ulang</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // --- DEFAULT/GURU SCREEN ---
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerText}>Dashboard Guru</Text>
+        <TouchableOpacity onPress={() => supabase.auth.signOut()}>
+          <Text style={{color: '#ef4444'}}>Keluar</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.title}>Menu Utama</Text>
+        <TouchableOpacity style={styles.btnPrimary}>
+          <Text style={styles.btnText}>Generate QR Presensi Sesi</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.btnPrimary, {marginTop: 10, backgroundColor: '#10b981'}]}>
+          <Text style={styles.btnText}>Approve Aktivitas Siswa</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#0f172a' },
+  authContainer: { flex: 1, justifyContent: 'center', padding: 24 },
+  logoBox: { width: 64, height: 64, backgroundColor: '#4f46e5', borderRadius: 16, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 24 },
+  logoText: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+  title: { fontSize: 24, fontWeight: 'bold', color: 'white', textAlign: 'center', marginBottom: 32 },
+  input: { backgroundColor: 'rgba(30, 41, 59, 0.7)', borderRadius: 12, padding: 16, color: 'white', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  btnPrimary: { backgroundColor: '#4f46e5', padding: 16, borderRadius: 12, alignItems: 'center' },
+  btnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, paddingTop: 40, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  headerText: { color: 'white', fontSize: 18, fontWeight: '600' },
+  scannerContainer: { flex: 1, overflow: 'hidden', position: 'relative' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  scanBox: { width: 250, height: 250, borderWidth: 2, borderColor: '#4f46e5', backgroundColor: 'transparent' },
+  footer: { padding: 24, backgroundColor: '#1e293b' },
+  infoText: { color: 'white', textAlign: 'center', marginBottom: 16, fontSize: 16 },
+  content: { padding: 24 },
+});
