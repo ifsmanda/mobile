@@ -9,9 +9,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const isFetching = useRef(false);
 
-  const fetchProfile = async (userId: string) => {
-    // Cegah double fetch
-    if (isFetching.current) return;
+  const fetchProfile = async (userId: string, force = false) => {
+    // Cegah double fetch kecuali dipaksa refresh
+    if (isFetching.current && !force) return;
     isFetching.current = true;
 
     try {
@@ -62,6 +62,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshProfile = async () => {
+    if (session?.user) {
+      await fetchProfile(session.user.id, true);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
 
@@ -95,7 +101,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading }}>
+    <AuthContext.Provider value={{ session, profile, loading, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

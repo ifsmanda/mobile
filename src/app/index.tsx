@@ -22,8 +22,8 @@ export default function Index() {
     return <Redirect href="/(siswa)/home" />;
   }
 
-  // Jika bukan siswa (guru/admin) untuk saat ini arahkan ke halaman guru-legacy
-  return <Redirect href="/guru-legacy" />;
+  // Jika bukan siswa (guru/admin) arahkan ke antarmuka guru baru
+  return <Redirect href="/(guru)/home" />;
 }
 
 const styles = StyleSheet.create({
