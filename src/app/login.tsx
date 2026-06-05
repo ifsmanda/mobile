@@ -19,7 +19,26 @@ export default function LoginScreen() {
 
   const signIn = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    let loginEmail = email.trim();
+    if (!loginEmail.includes('@')) {
+      try {
+        const { data: profileData, error: lookupError } = await supabase
+          .from('sr_profiles')
+          .select('email')
+          .eq('nomor_induk', loginEmail)
+          .maybeSingle();
+
+        if (!lookupError && profileData?.email) {
+          loginEmail = profileData.email;
+        } else {
+          loginEmail = `${loginEmail}@lensa.smanda.id`;
+        }
+      } catch (err) {
+        loginEmail = `${loginEmail}@lensa.smanda.id`;
+      }
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (error) Alert.alert('Gagal Login', error.message);
     setLoading(false);
   };
@@ -41,8 +60,14 @@ export default function LoginScreen() {
               />
             </View>
             
-            <Text style={[styles.title, { color: colors.text }]}>Smart-Report Siswa</Text>
-            <Text style={[styles.subtitle, { color: colors.textMuted }]}>SMAN 2 Bandung</Text>
+            <Text style={[styles.title, { color: colors.text }]}>LENSA - SMANDA</Text>
+            <Text 
+              style={[styles.subtitle, { color: colors.textMuted, fontSize: 10, letterSpacing: 0.2, textAlign: 'center', paddingHorizontal: 10 }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              Log of Educational Network, Students & Attendance
+            </Text>
 
             <View style={[styles.formContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <TextInput
@@ -88,12 +113,12 @@ const styles = StyleSheet.create({
     padding: 24 
   },
   logoBox: { 
-    width: 120, 
-    height: 120, 
+    width: 145, 
+    height: 145, 
     justifyContent: 'center', 
     alignItems: 'center', 
     alignSelf: 'center', 
-    marginBottom: 16 
+    marginBottom: 20 
   },
   logoImage: {
     width: '100%',
