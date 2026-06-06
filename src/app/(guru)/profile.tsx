@@ -50,9 +50,13 @@ export default function GuruProfileScreen() {
 
   const getRolesList = () => {
     const roles = [];
+    if (profile?.is_kepsek) roles.push('Kepala Sekolah');
     if (profile?.is_piket) roles.push('Guru Piket');
     if (profile?.is_walikelas) roles.push(`Wali Kelas ${profile?.kelas_binaan || ''}`);
-    if (profile?.is_manajemen) roles.push('Manajemen');
+    if (profile?.is_manajemen) {
+      const field = profile?.manajemen_role ? (profile.manajemen_role.charAt(0) + profile.manajemen_role.slice(1).toLowerCase()) : 'Sekolah';
+      roles.push(`${profile?.is_waka ? 'Waka' : 'Staf'} ${field}`);
+    }
     
     if (roles.length === 0) {
       return profile?.role === 'ADMIN' ? 'Administrator' : 'Guru Mata Pelajaran';
